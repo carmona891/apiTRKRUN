@@ -1,0 +1,6 @@
+@TRKRUN_HostAddress = http://localhost:5186
+
+GET {{TRKRUN_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

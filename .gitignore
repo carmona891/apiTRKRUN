@@ -1,0 +1,18 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build results
+bin/
+obj/
+
+# NuGet
+*.nupkg
+packages/
+
+# Rider
+.idea/
+
+# Configuración de entorno
+appsettings.*.json
