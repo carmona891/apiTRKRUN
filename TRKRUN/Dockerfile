@@ -1,36 +1,23 @@
-##############################
-# 1. Etapa de runtime/base  #
-##############################
+# Dockerfile optimizado para Railway
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
-EXPOSE 80
-EXPOSE 443
+EXPOSE $PORT
+ENV ASPNETCORE_URLS=http://0.0.0.0:$PORT
 
-#####################
-# 2. Etapa de build #
-#####################
+# Build stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copiamos el .csproj y restauramos dependencias
-COPY ["TKRKUN/TKRKUN.csproj", "TKRKUN/"]
-RUN dotnet restore "TKRKUN/TKRKUN.csproj"
+# Copiar archivo de proyecto primero (para cache de Docker)
+COPY *.csproj ./
+RUN dotnet restore
 
-# Copiamos el resto de archivos y compilamos
-COPY . .
-WORKDIR "/src/TKRKUN"
-RUN dotnet build "TKRKUN.csproj" -c Release -o /app/build
+# Copiar el resto de archivos y compilar
+COPY . ./
+RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
-#########################
-# 3. Etapa de publish   #
-#########################
-FROM build AS publish
-RUN dotnet publish "TKRKUN.csproj" -c Release -o /app/publish
-
-############################
-# 4. Etapa final (runtime) #
-############################
+# Runtime stage
 FROM base AS final
 WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "TKRKUN.dll"]
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "TRKRUN.dll"]
