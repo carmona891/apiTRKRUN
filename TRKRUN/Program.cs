@@ -94,31 +94,31 @@ jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? builder.Conf
 // Validar que tenemos la clave JWT
 if (string.IsNullOrEmpty(jwtKey))
 {
-  throw new InvalidOperationException("JWT Key no está configurada. Verifica JWT_KEY en variables de entorno o Jwt:Key en appsettings.json");
+    throw new InvalidOperationException("JWT Key no está configurada. Verifica JWT_KEY en variables de entorno o Jwt:Key en appsettings.json");
 }
 
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
 {
-  options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-  options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
-  // CAMBIO AQUÍ: Usar builder.Environment en lugar de app.Environment
-  options.RequireHttpsMetadata = builder.Environment.IsProduction(); // Solo HTTPS en producción
-  options.SaveToken = true;
-  options.TokenValidationParameters = new TokenValidationParameters
-  {
-    ValidateIssuer = true,
-    ValidateAudience = true,
-    ValidateLifetime = true,
-    ValidateIssuerSigningKey = true,
-    ValidIssuer = jwtIssuer,
-    ValidAudience = jwtAudience,
-    IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
-  };
+    // CAMBIO AQUÍ: Usar builder.Environment en lugar de app.Environment
+    options.RequireHttpsMetadata = builder.Environment.IsProduction(); // Solo HTTPS en producción
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
+    };
 });
 
 // AHORA SÍ construir la aplicación
@@ -152,11 +152,10 @@ if (app.Environment.IsDevelopment())
 }
 
 // 11. Habilitar Swagger
-if (app.Environment.IsDevelopment())
-{
+
   app.UseSwagger();
   app.UseSwaggerUI();
-}
+
 
 // No usar HTTPS redirect en Railway (Railway maneja HTTPS automáticamente)
 if (!app.Environment.IsProduction())
