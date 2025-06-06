@@ -21,7 +21,7 @@ var corsOrigins = new List<string>
     "http://192.168.1.134:4200",
     "http://192.168.56.1:4200",
     "https://trkrun.netlify.app",
-    "https://norman-main-velvet-ticket.trycloudflare.com/"
+    "https://norman-main-velvet-ticket.trycloudflare.com"
 };
 
 // Agregar dominio de Railway si existe
@@ -37,8 +37,8 @@ builder.Services.AddCors(options =>
     policy
         .WithOrigins(corsOrigins.ToArray())
         .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials();
+        .AllowAnyMethod();
+        //.AllowCredentials();
   });
 });
 
