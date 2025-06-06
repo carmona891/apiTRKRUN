@@ -13,8 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
-// 1. Añadir política de CORS - Incluir dominio de Railway
-var railwayUrl = Environment.GetEnvironmentVariable("RAILWAY_PUBLIC_DOMAIN");
+// 1. Añadir política de CORS - CORRECCIÓN PARA RAILWAY
 var corsOrigins = new List<string>
 {
     "http://localhost:4200",
@@ -24,11 +23,25 @@ var corsOrigins = new List<string>
     "https://norman-main-velvet-ticket.trycloudflare.com"
 };
 
-// Agregar dominio de Railway si existe
+// CORRECCIÓN: Railway proporciona diferentes variables de entorno
+var railwayUrl = Environment.GetEnvironmentVariable("RAILWAY_STATIC_URL")
+                ?? Environment.GetEnvironmentVariable("RAILWAY_PUBLIC_DOMAIN");
+
 if (!string.IsNullOrEmpty(railwayUrl))
 {
-  corsOrigins.Add($"https://{railwayUrl}");
+  // Si es RAILWAY_STATIC_URL ya viene con https://
+  if (railwayUrl.StartsWith("https://"))
+  {
+    corsOrigins.Add(railwayUrl);
+  }
+  else
+  {
+    corsOrigins.Add($"https://{railwayUrl}");
+  }
 }
+
+// También agregar la URL específica de tu deployment actual
+corsOrigins.Add("https://apitrkrun-production.up.railway.app");
 
 builder.Services.AddCors(options =>
 {
@@ -37,8 +50,8 @@ builder.Services.AddCors(options =>
     policy
         .WithOrigins(corsOrigins.ToArray())
         .AllowAnyHeader()
-        .AllowAnyMethod();
-        //.AllowCredentials();
+        .AllowAnyMethod()
+        .AllowCredentials(); // IMPORTANTE: Habilitar credenciales si usas autenticación
   });
 });
 
@@ -84,45 +97,41 @@ builder.Services.AddScoped<ITorneoService, TorneoService>();
 builder.Services.AddScoped<ICircuitoService, CircuitoService>();
 builder.Services.AddScoped<IRolService, RolService>();
 
-// 8. CONFIGURAR JWT - CORRECCIÓN
+// 8. CONFIGURAR JWT
 string jwtKey, jwtIssuer, jwtAudience;
 
-// Usar variables de entorno de Railway si existen, sino usar appsettings.json
 jwtKey = Environment.GetEnvironmentVariable("JWT_KEY") ?? builder.Configuration["Jwt:Key"];
 jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? builder.Configuration["Jwt:Issuer"];
 jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? builder.Configuration["Jwt:Audience"];
 
-// Validar que tenemos la clave JWT
 if (string.IsNullOrEmpty(jwtKey))
 {
-    throw new InvalidOperationException("JWT Key no está configurada. Verifica JWT_KEY en variables de entorno o Jwt:Key en appsettings.json");
+  throw new InvalidOperationException("JWT Key no está configurada. Verifica JWT_KEY en variables de entorno o Jwt:Key en appsettings.json");
 }
 
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+  options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+  options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
-    // CAMBIO AQUÍ: Usar builder.Environment en lugar de app.Environment
-    options.RequireHttpsMetadata = builder.Environment.IsProduction(); // Solo HTTPS en producción
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtIssuer,
-        ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
-    };
+  options.RequireHttpsMetadata = builder.Environment.IsProduction();
+  options.SaveToken = true;
+  options.TokenValidationParameters = new TokenValidationParameters
+  {
+    ValidateIssuer = true,
+    ValidateAudience = true,
+    ValidateLifetime = true,
+    ValidateIssuerSigningKey = true,
+    ValidIssuer = jwtIssuer,
+    ValidAudience = jwtAudience,
+    IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
+  };
 });
 
-// AHORA SÍ construir la aplicación
 var app = builder.Build();
 
 // 9. Aplicar migraciones automáticamente
@@ -138,33 +147,30 @@ using (var scope = app.Services.CreateScope())
   catch (Exception ex)
   {
     Console.WriteLine($"Error aplicando migraciones: {ex.Message}");
-    // En producción podrías querer fallar aquí o continuar según tu estrategia
     if (app.Environment.IsProduction())
     {
-      throw; // Fallar en producción si no se pueden aplicar migraciones
+      throw;
     }
   }
 }
 
-// 10. Mostrar errores detallados solo en Development
+// 10. Configuración de middleware
 if (app.Environment.IsDevelopment())
 {
   app.UseDeveloperExceptionPage();
 }
 
-// 11. Habilitar Swagger
+// 11. Habilitar Swagger en todos los entornos para debugging
+app.UseSwagger();
+app.UseSwaggerUI();
 
-  app.UseSwagger();
-  app.UseSwaggerUI();
-
-
-// No usar HTTPS redirect en Railway (Railway maneja HTTPS automáticamente)
+// No usar HTTPS redirect en Railway
 if (!app.Environment.IsProduction())
 {
   app.UseHttpsRedirection();
 }
 
-// 12. Aplicar CORS antes de Autenticación/Autorización
+// 12. CORS DEBE IR ANTES de Authentication/Authorization
 app.UseCors("AllowAngularClient");
 
 // 13. Autenticación → Autorización
@@ -173,7 +179,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Endpoint de salud para verificar que todo funciona
+// Endpoint de salud mejorado
 app.MapGet("/health", () => new
 {
   Status = "Healthy",
@@ -181,11 +187,17 @@ app.MapGet("/health", () => new
   Database = !string.IsNullOrEmpty(mysqlUrl) ? "Railway MySQL" : "Local MySQL",
   HasJwtKey = !string.IsNullOrEmpty(jwtKey),
   Port = port,
+  CorsOrigins = corsOrigins, // Para debugging
+  RailwayUrl = railwayUrl,   // Para debugging
   Timestamp = DateTime.UtcNow
 });
+
+// Endpoint específico para verificar CORS
+app.MapGet("/cors-test", () => new { Message = "CORS está funcionando!" });
 
 Console.WriteLine($"Aplicación iniciando en puerto: {port}");
 Console.WriteLine($"Entorno: {app.Environment.EnvironmentName}");
 Console.WriteLine($"Base de datos: {(!string.IsNullOrEmpty(mysqlUrl) ? "Railway" : "Local")}");
+Console.WriteLine($"CORS Origins configurados: {string.Join(", ", corsOrigins)}");
 
 app.Run();
