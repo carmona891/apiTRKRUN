@@ -125,67 +125,62 @@ builder.Services.AddAuthentication(options =>
 // AHORA SÍ construir la aplicación
 var app = builder.Build();
 
-// 9. Aplicar migraciones automáticamente
-using (var scope = app.Services.CreateScope())
+// 1) Middleware global para capturar excepciones y devolver JSON (y CORS)
+app.Use(async (context, next) =>
 {
-  var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
   try
   {
-    Console.WriteLine("Aplicando migraciones de base de datos...");
-    db.Database.Migrate();
-    Console.WriteLine("Migraciones aplicadas exitosamente");
+    await next();
   }
   catch (Exception ex)
   {
-    Console.WriteLine($"Error aplicando migraciones: {ex.Message}");
-    // En producción podrías querer fallar aquí o continuar según tu estrategia
-    if (app.Environment.IsProduction())
-    {
-      throw; // Fallar en producción si no se pueden aplicar migraciones
-    }
-  }
-}
+    // Fuera de Dev, capturamos cualquier excepción no controlada:
+    context.Response.StatusCode = 500;
+    context.Response.ContentType = "application/json";
 
-// 10. Mostrar errores detallados solo en Development
+    // Asegurarnos de forzar los headers CORS en la respuesta de error:
+    context.Response.Headers["Access-Control-Allow-Origin"] = "https://trkrun.netlify.app";
+    context.Response.Headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS";
+    context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+
+    // Opcional: escribir un JSON de error simple
+    var errorJson = System.Text.Json.JsonSerializer.Serialize(new
+    {
+      message = "Error interno del servidor.",
+      detail = app.Environment.IsDevelopment() ? ex.Message : null
+    });
+    await context.Response.WriteAsync(errorJson);
+  }
+});
+
+// 2) Si estás en Development: página de excepciones detallada
 if (app.Environment.IsDevelopment())
 {
   app.UseDeveloperExceptionPage();
 }
 
-// 11. Habilitar Swagger
-
-  app.UseSwagger();
-  app.UseSwaggerUI();
-
-
-// No usar HTTPS redirect en Railway (Railway maneja HTTPS automáticamente)
+// 3) Forzar HTTPS (solo en no‐producción)
 if (!app.Environment.IsProduction())
 {
   app.UseHttpsRedirection();
 }
 
-// 12. Aplicar CORS antes de Autenticación/Autorización
+// 4) Ahora sí aplicar CORS:
 app.UseCors("AllowAngularClient");
 
-// 13. Autenticación → Autorización
+// 5) Autenticación y Autorización
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 6) Enrutamiento a controladores
 app.MapControllers();
 
-// Endpoint de salud para verificar que todo funciona
+// 7) Endpoint de salud
 app.MapGet("/health", () => new
 {
   Status = "Healthy",
   Environment = app.Environment.EnvironmentName,
-  Database = !string.IsNullOrEmpty(mysqlUrl) ? "Railway MySQL" : "Local MySQL",
-  HasJwtKey = !string.IsNullOrEmpty(jwtKey),
-  Port = port,
-  Timestamp = DateTime.UtcNow
+  // …
 });
-
-Console.WriteLine($"Aplicación iniciando en puerto: {port}");
-Console.WriteLine($"Entorno: {app.Environment.EnvironmentName}");
-Console.WriteLine($"Base de datos: {(!string.IsNullOrEmpty(mysqlUrl) ? "Railway" : "Local")}");
 
 app.Run();
