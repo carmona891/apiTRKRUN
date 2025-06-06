@@ -20,6 +20,7 @@ var corsOrigins = new List<string>
     "http://localhost:4200",
     "http://192.168.1.134:4200",
     "http://192.168.56.1:4200",
+    "https://trkrun.netlify.app/",
     "https://norman-main-velvet-ticket.trycloudflare.com/"
 };
 
